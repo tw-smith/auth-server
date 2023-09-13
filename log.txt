@@ -1,0 +1,1 @@
+notification for nonverified@test.com: Mrs NonVerified URL is http://127.0.0.1:8000?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJNcnMgTm9uVmVyaWZpZWQiLCJzZXJ2aWNlIjoidG91cnRyYWNrZXIiLCJleHAiOjE2OTQ2MjIwOTR9.TXZooEREX-gqe1lS2DTWrwukwrzAL-JDWY_BJl41kGg
