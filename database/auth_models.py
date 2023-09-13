@@ -10,6 +10,7 @@ class BaseUser(DeclarativeBase):
     username = Column(String, unique=True, index=True)
     password_hash = Column(String)
     verified = Column(Boolean, default=False)
+    password_locked = Column(Boolean, default=False)
     pwd_hasher = PasswordHasher()
 
     def authenticate_user(self, password):

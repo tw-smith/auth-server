@@ -63,17 +63,13 @@ async def signup_user(service: str,
     user_object = create_user(db=db, user=user, service=service)
     verification_email = VerificationEmail(user_object, service, str(request.url_for('verify_user')))
     background_tasks.add_task(verification_email.send_email)
-    #background_tasks.add_task(send_verification_email, user_object, service, request.url_for("verify_user"))
     return {"msg": "user created"}
 
 
 @router.get("/verify")
 async def verify_user(token: str,
                       db: Session = Depends(get_db)):
-    #try:
     token_payload = decode_jwt(token)
-    #except JWTError:
-    #    raise HTTPException(status_code=400, detail="jwt error")
     user = get_user_by_username(db, token_payload['sub'], token_payload['service'])
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
@@ -94,13 +90,12 @@ async def login_user(service: str,
                             detail="Authorisation Error",
                             headers={"WWW-Authenticate": "Bearer"})
     if user.authenticate_user(form_data.password):
-        if user.verified:
+        if user.verified and not user.password_locked:
             jwt_token = JWTUserAccessToken(service, user)
             return jwt_token.encode_jwt()
         else:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                                 detail="Account not verified")
-        #return {"access_token": encode_jwt({"sub": user.username}, service), "token_type": "bearer"}
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Authorisation Error",
@@ -116,7 +111,7 @@ async def change_password(service: str,
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Authorisation Error",
                             headers={"WWW-Authenticate": "Bearer"})
-    if user.authenticate_user(form_data.old_password):
+    if user.authenticate_user(form_data.old_password): #TODO do we need password reset lock here as well?
         user.password_hash = pwd_hasher.hash(form_data.new_password)
         db.commit()
         db.refresh(user)
@@ -138,6 +133,9 @@ async def request_password_reset(service: str,
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED) #TODO do we want to do this as it alerts user that account doesn't exist?
     password_reset_email = PasswordResetEmail(user, service, str(request.url_for('verify_user')))
     background_tasks.add_task(password_reset_email.send_email)
+    user.password_locked = True
+    db.commit()
+    db.refresh(user)
     return {"msg": "Password reset requested"} # TODO as for above todo
 
 

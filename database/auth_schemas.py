@@ -13,6 +13,7 @@ class UserCreate(UserBase):
 class User(UserBase):
     id: int
     verified: bool
+    password_locked: bool
 
     class Config:
         orm_mode = True

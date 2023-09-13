@@ -71,11 +71,23 @@ def seed_db(db):
     db.refresh(verified_user_object)
 
     non_verified_user = UserCreate(
-        email = "nonverified@test.com",
-        username = "Mrs NonVerified",
+        email="nonverified@test.com",
+        username="Mrs NonVerified",
         password_hash=pwd_hasher.hash("testpassword")
     )
     non_verified_user_object = create_user(db, non_verified_user, 'tourtracker')
+
+    password_locked_user = UserCreate(
+        email="passwordlocked@test.com",
+        username="Lady Locked",
+        password_hash=pwd_hasher.hash("testpassword")
+    )
+    password_locked_user_object = create_user(db, password_locked_user, 'tourtracker')
+    password_locked_user_object.verified = True
+    password_locked_user_object.password_locked = True
+    db.commit()
+    db.refresh(password_locked_user_object)
+
     yield non_verified_user_object
 
 
@@ -199,6 +211,15 @@ def test_auth_non_verified_user(client, seed_db):
     response = client.post(
         "/auth?service=tourtracker",
         data={"username": "Mrs NonVerified", "password": "testpassword"}
+    )
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Account not verified"}
+
+
+def test_auth_password_locked(client, seed_db):
+    response = client.post(
+        "/auth?service=tourtracker",
+        data={"username": "Lady Locked", "password": "testpassword"}
     )
     assert response.status_code == 401
     assert response.json() == {"detail": "Account not verified"}
