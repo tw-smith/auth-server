@@ -10,8 +10,10 @@ class Settings(BaseSettings):
     email_sender_address: str
     development: bool
     production: bool
-    tourtracker_email_template_id: str
-    arcade_email_template_id: str
+    tourtracker_verification_email_template_id: str
+    tourtracker_password_reset_email_template_id: str
+    arcade_verification_email_template_id: str
+    arcade_password_reset_email_template_id: str
 
     class Config:
         env_file = ".env"

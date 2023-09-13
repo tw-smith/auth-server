@@ -53,7 +53,7 @@ def encode_jwt(data, service: str, expires_delta: timedelta | None = None):
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     data.update({"exp": expire})
     data.update({"service": service})
-    encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(data, settings.secret_key, algorithm=ALGORITHM)
     return encoded_jwt
 
 

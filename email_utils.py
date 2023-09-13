@@ -2,41 +2,79 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import os
 from config import settings
-from database.auth_models import TourTrackerUser
-from jwt_utilities import JWTUserAccessToken
+from database.auth_models import TourTrackerUser, ArcadeUser
+from jwt_utilities import JWTUserAccessToken, encode_jwt
+from datetime import timedelta
 
 
-def send_verification_email(user: TourTrackerUser, service: str, base_url: str):
-    token = JWTUserAccessToken(service, user)
-    token = token.encode_jwt()
-    verification_url = f"{base_url}?token={token}"
-    if settings.production:
-        sg = SendGridAPIClient(api_key=settings.sendgrid_api_key)
-        message = Mail(
-            from_email=settings.email_sender_address,
-            to_emails=user.email,
-            subject='Please verify your email address'
-        )
-        message.dynamic_template_data = {
-            'username': user.username,
-            'verification_url': verification_url
+
+class AuthEmail:
+    def __init__(self, user: TourTrackerUser | ArcadeUser, service: str, base_url: str):
+        self.user = user
+        self.service = service
+        self.base_url = base_url
+        self.url_path = ''
+        self.payload = {
+            "sub": self.user.username
         }
-        match service:
-            case "tourtracker":
-                message.template_id = settings.tourtracker_email_template_id
-            case "arcade":
-                message.template_id = settings.arcade_email_template_id
-        try:
-            response = sg.send(message)
-            print(response.status_code)
-            print(response.body)
-            print(response.headers)
-        except Exception as e:
-            print(e)
+        self.token_url = self.generate_token_url()
+        self.email_subject = ''
+        self.sendgrid_template_id = ''
 
-    if settings.development:
-        print("EMAIL DEV MODE")
-        with open("log.txt", mode="w") as email_file:
-            content = f"notification for {user.email}: {user.username} URL is {verification_url}"
-            email_file.write(content)
-        return token
+    def generate_token_url(self):
+        token = encode_jwt(self.payload, self.service, expires_delta=timedelta(minutes=15))
+        return f"{self.base_url}{self.url_path}?token={token}"
+
+    def send_email(self):
+        if settings.production:
+            sg = SendGridAPIClient(api_key=settings.sendgrid_api_key)
+            message = Mail(
+                from_email=settings.email_sender_address,
+                to_emails=self.user.email,
+                subject=self.email_subject
+            )
+            message.dynamic_template_data = {
+                'username': self.user.username,
+                'token_url': self.token_url
+            }
+            message.template_id = self.sendgrid_template_id
+            try:
+                response = sg.send(message)
+            except Exception as e:
+                print(e)
+        if settings.development:
+            print("EMAIL DEV MODE")
+            print(self.token_url)
+            return self.email_subject, self.token_url
+
+
+class PasswordResetEmail(AuthEmail):
+    def __init__(self, user: TourTrackerUser | ArcadeUser, service: str, base_url: str):
+        super().__init__(user, service, base_url)
+        self.email_subject = "Password Reset Email"
+        self.url_path = '/resetpassword'
+        match self.service:
+            case "tourtracker":
+                self.sendgrid_template_id = settings.tourtracker_password_reset_email_template_id
+            case "arcade":
+                self.sendgrid_template_id = settings.arcade_password_reset_email_template_id
+
+
+class VerificationEmail(AuthEmail):
+    def __init__(self, user: TourTrackerUser | ArcadeUser, service: str, base_url: str):
+        super().__init__(user, service, base_url)
+        self.email_subject = "Please verify your email address"
+        self.url_path = '/verify'
+        match self.service:
+            case "tourtracker":
+                self.sendgrid_template_id = settings.tourtracker_verification_email_template_id
+            case "arcade":
+                self.sendgrid_template_id = settings.arcade_verification_email_template_id
+
+
+def send_password_reset_email(user: TourTrackerUser | ArcadeUser, service: str, base_url: str):
+    payload = {
+        "sub": user.username,
+    }
+    token = encode_jwt(payload, service, expires_delta=timedelta(minutes=15))
+    verification_url = f"{base_url}?token={token}"

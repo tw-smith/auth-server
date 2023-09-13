@@ -10,7 +10,7 @@ from database.crud import create_user, get_user_by_username, get_user_by_email
 from database.auth_schemas import UserCreate
 from utils import pwd_hasher
 from jwt_utilities import decode_jwt
-from email_utils import send_verification_email
+from email_utils import VerificationEmail, PasswordResetEmail
 from config import settings
 
 
@@ -230,9 +230,20 @@ def test_change_password_incorrect_old_password(client, db, seed_db):
 
 def test_verify_user(client, db, seed_db):
     user = get_user_by_email(db, 'nonverified@test.com', 'tourtracker')
-    token = send_verification_email(user, 'tourtracker', 'http://127.0.0.1:8000')
-    response = client.get(f"/verifyuser?token={token}")
+    verification_email = VerificationEmail(user, 'tourtracker', 'http://127.0.0.1:8000')
+    email_subject, token_url = verification_email.send_email()
+    assert email_subject == "Please verify your email address"
+    token = token_url.split("?token=")[1]
+    response = client.get(f"/verify?token={token}")
     assert response.status_code == 200
     assert response.json() == {"msg": "user verified"}
     assert user.verified is True
+
+
+def test_password_reset_request(client, db, seed_db):
+    response = client.post('/resetpassword?service=tourtracker',
+                          data={'email': 'verified@test.com'})
+    assert response.status_code == 200
+    assert response.json() == {"msg": "Password reset requested"}
+
 

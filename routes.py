@@ -7,7 +7,7 @@ from database.crud import get_user_by_email, get_user_by_username, create_user
 from db_utils import get_db
 from sqlalchemy.orm import Session
 from utils import pwd_hasher
-from email_utils import send_verification_email
+from email_utils import VerificationEmail, PasswordResetEmail
 from jwt_utilities import decode_jwt, JWTUserAccessToken
 
 
@@ -34,6 +34,12 @@ class PasswordChangeForm:
         self.new_password = new_password
 
 
+class PasswordResetRequestForm:
+    def __init__(self,
+                 email: str = Form()):
+        self.email = email
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -55,11 +61,13 @@ async def signup_user(service: str,
         password_hash=pwd_hasher.hash(form_data.password)
     )
     user_object = create_user(db=db, user=user, service=service)
-    background_tasks.add_task(send_verification_email, user_object, service, request.url_for("verify_user"))
+    verification_email = VerificationEmail(user_object, service, str(request.url_for('verify_user')))
+    background_tasks.add_task(verification_email.send_email)
+    #background_tasks.add_task(send_verification_email, user_object, service, request.url_for("verify_user"))
     return {"msg": "user created"}
 
 
-@router.get("/verifyuser")
+@router.get("/verify")
 async def verify_user(token: str,
                       db: Session = Depends(get_db)):
     #try:
@@ -117,4 +125,21 @@ async def change_password(service: str,
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Authorisation Error",
                             headers={"WWW-Authenticate": "Bearer"})
+
+
+@router.post("/resetpassword")
+async def request_password_reset(service: str,
+                                 form_data: Annotated[PasswordResetRequestForm, Depends()],
+                                 request: Request,
+                                 background_tasks: BackgroundTasks,
+                                 db: Session = Depends(get_db)):
+    user = get_user_by_email(db, form_data.email, service)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED) #TODO do we want to do this as it alerts user that account doesn't exist?
+    password_reset_email = PasswordResetEmail(user, service, str(request.url_for('verify_user')))
+    background_tasks.add_task(password_reset_email.send_email)
+    return {"msg": "Password reset requested"} # TODO as for above todo
+
+
+
 
