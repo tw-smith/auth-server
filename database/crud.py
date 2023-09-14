@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from . import auth_models, auth_schemas
+import time
 
 # TODO: try and collate all these match case statements for DRY and improved maintainability
 
@@ -33,6 +34,7 @@ def create_user(db: Session, user: auth_schemas.UserCreate, service):
             db_user = auth_models.TourTrackerUser(email=user.email, username=user.username, password_hash=user.password_hash)
         case "arcade":
             db_user = auth_models.ArcadeUser(email=user.email, username=user.username, password_hash=user.password_hash)
+    db_user.created_at = int(time.time())
     db.add(db_user)
     db.commit()
     db.refresh(db_user)

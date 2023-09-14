@@ -11,7 +11,9 @@ class BaseUser(DeclarativeBase):
     password_hash = Column(String)
     verified = Column(Boolean, default=False)
     password_locked = Column(Boolean, default=False)
+    created_at = Column(Integer)
     pwd_hasher = PasswordHasher()
+
 
     def authenticate_user(self, password):
         try:

@@ -13,6 +13,8 @@ from jwt_utilities import decode_jwt
 from email_utils import VerificationEmail, PasswordResetEmail
 from config import settings
 
+# Test database setup reference: https://dev.to/jbrocher/fastapi-testing-a-database-5ao5
+
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 

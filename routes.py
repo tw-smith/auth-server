@@ -11,6 +11,10 @@ from email_utils import VerificationEmail, PasswordResetEmail
 from jwt_utilities import decode_jwt, JWTUserAccessToken
 
 
+# TODO add not valid before to JWT
+# TODO refresh tokens
+# TODO update password on reset password link click https://www.smashingmagazine.com/2017/11/safe-password-resets-with-json-web-tokens/
+
 router = APIRouter()
 
 
@@ -137,6 +141,7 @@ async def request_password_reset(service: str,
     db.commit()
     db.refresh(user)
     return {"msg": "Password reset requested"} # TODO as for above todo
+
 
 
 

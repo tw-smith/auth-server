@@ -14,6 +14,7 @@ class User(UserBase):
     id: int
     verified: bool
     password_locked: bool
+    created_at: int
 
     class Config:
         orm_mode = True
