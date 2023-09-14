@@ -59,6 +59,12 @@ class PasswordResetEmail(AuthEmail):
             case "arcade":
                 self.sendgrid_template_id = settings.arcade_password_reset_email_template_id
 
+    # Override parent token generation to create one time use token using password hash and user creation time
+    def generate_token_url(self):
+        secret_key = f"{self.user.password_hash}_{self.user.created_at}"
+        token = encode_jwt(self.payload, self.service, expires_delta=timedelta(minutes=15), secret_key=secret_key)
+        return f"{self.base_url}{self.url_path}?token={token}"
+
 
 class VerificationEmail(AuthEmail):
     def __init__(self, user: TourTrackerUser | ArcadeUser, service: str, base_url: str):

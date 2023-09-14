@@ -96,7 +96,7 @@ def seed_db(db):
 def test_decode_jwt_expired(test_jwts):
     token = test_jwts['expired_jwt']
     with pytest.raises(HTTPException) as e:
-        token = decode_jwt(token)
+        token = decode_jwt(token, settings.secret_key)
     assert e.value.status_code == 401
     assert e.value.detail == "Expired JWT Token"
 
@@ -119,7 +119,7 @@ def test_decode_jwt_bad_algo(test_jwts):
 
 def test_decode_jwt(test_jwts):
     token = test_jwts['valid_jwt']
-    payload = decode_jwt(token)
+    payload = decode_jwt(token, settings.secret_key)
     assert payload['sub'] == 'Mr Verified'
     assert payload['service'] == 'tourtracker'
 
@@ -268,5 +268,14 @@ def test_password_reset_request(client, db, seed_db):
                           data={'email': 'verified@test.com'})
     assert response.status_code == 200
     assert response.json() == {"msg": "Password reset requested"}
+
+
+def test_password_reset_one_time_token(db, seed_db):
+    user = get_user_by_email(db, "verified@test.com", "tourtracker")
+    password_reset_email = PasswordResetEmail(user, 'tourtracker', 'http://127.0.0.1')
+    secret_key = f"{user.password_hash}_{user.created_at}"
+    token = password_reset_email.token_url.split("?token=")[1]
+    payload = decode_jwt(token, secret_key=secret_key)
+    assert payload['sub'] == user.username
 
 
