@@ -2,6 +2,7 @@ from jose import jwt, JWTError, ExpiredSignatureError
 from config import settings
 from datetime import datetime, timedelta
 from fastapi import HTTPException
+import secrets
 
 SECRET_KEY = settings.secret_key
 ALGORITHM = settings.jwt_algorithm

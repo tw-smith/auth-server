@@ -2,14 +2,14 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 import os
 from config import settings
-from database.auth_models import TourTrackerUser, ArcadeUser
+from database.auth_models import TourTrackerUser, ArcadeUser, BaseUser
 from jwt_utilities import JWTUserAccessToken, encode_jwt
 from datetime import timedelta
 
 
 
 class AuthEmail:
-    def __init__(self, user: TourTrackerUser | ArcadeUser, service: str, base_url: str):
+    def __init__(self, user: BaseUser, service: str, base_url: str):
         self.user = user
         self.service = service
         self.base_url = base_url
@@ -49,7 +49,7 @@ class AuthEmail:
 
 
 class PasswordResetEmail(AuthEmail):
-    def __init__(self, user: TourTrackerUser | ArcadeUser, service: str, base_url: str):
+    def __init__(self, user: BaseUser, service: str, base_url: str):
         super().__init__(user, service, base_url)
         self.email_subject = "Password Reset Email"
         self.url_path = '/resetpassword'
@@ -67,7 +67,7 @@ class PasswordResetEmail(AuthEmail):
 
 
 class VerificationEmail(AuthEmail):
-    def __init__(self, user: TourTrackerUser | ArcadeUser, service: str, base_url: str):
+    def __init__(self, user: BaseUser, service: str, base_url: str):
         super().__init__(user, service, base_url)
         self.email_subject = "Please verify your email address"
         self.url_path = '/verify'

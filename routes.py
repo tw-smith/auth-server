@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import APIRouter, HTTPException, Depends, status, Form, BackgroundTasks, Request
+from fastapi import APIRouter, HTTPException, Depends, status, Form, BackgroundTasks, Request, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from database import auth_schemas
@@ -8,8 +8,8 @@ from db_utils import get_db
 from sqlalchemy.orm import Session
 from utils import pwd_hasher
 from email_utils import VerificationEmail, PasswordResetEmail
-from jwt_utilities import decode_jwt, JWTUserAccessToken
-
+from jwt_utilities import encode_jwt, decode_jwt, JWTUserAccessToken
+from config import settings
 
 # TODO add not valid before to JWT
 # TODO refresh tokens
@@ -46,7 +46,7 @@ class PasswordResetRequestForm:
 
 class Token(BaseModel):
     access_token: str
-    token_type: str
+    #token_type: str
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
@@ -84,9 +84,11 @@ async def verify_user(token: str,
         return {"msg": "user verified"}
 
 
-@router.post("/auth", response_model=Token)
+#@router.post("/auth", response_model=Token)
+@router.post("/auth") # TODO put response model back in
 async def login_user(service: str,
                      form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+                     response: Response,
                      db: Session = Depends(get_db)):
     user = get_user_by_username(db, form_data.username, service)
     if not user:
@@ -95,8 +97,16 @@ async def login_user(service: str,
                             headers={"WWW-Authenticate": "Bearer"})
     if user.authenticate_user(form_data.password):
         if user.verified and not user.password_locked:
-            jwt_token = JWTUserAccessToken(service, user)
-            return jwt_token.encode_jwt()
+            # https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html
+            fingerprint, fingerprint_hash = user.generate_user_fingerprint()
+            jwt_token = encode_jwt({"fgp_hash": fingerprint_hash}, service)
+            response.set_cookie(key="__Secure-fgp",
+                                value=fingerprint,
+                                httponly=True,
+                                secure=True,
+                                samesite='strict',
+                                max_age=settings.access_token_expire_minutes*60)
+            return jwt_token
         else:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                                 detail="Account not verified")

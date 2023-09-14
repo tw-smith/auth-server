@@ -5,7 +5,7 @@ from main import app
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from db_utils import get_db
-from database.auth_models import TourTrackerUser
+from database.auth_models import BaseUser, TourTrackerUser
 from database.crud import create_user, get_user_by_username, get_user_by_email
 from database.auth_schemas import UserCreate
 from utils import pwd_hasher
@@ -227,6 +227,21 @@ def test_auth_password_locked(client, seed_db):
     assert response.json() == {"detail": "Account not verified"}
 
 
+def test_auth(client, seed_db):
+    response = client.post(
+        "/auth?service=tourtracker",
+        data={"username": "Mr Verified", "password": "testpassword"}
+    )
+    assert response.status_code == 200
+    assert response.cookies.get('__Secure-fgp') is not None
+    for cookie in response.cookies.jar:
+        assert cookie.secure is True
+        assert cookie.get_nonstandard_attr('SameSite') == 'strict'
+        assert cookie.has_nonstandard_attr('HttpOnly') is True
+
+
+
+
 def test_change_password(client, db, seed_db):
     response = client.post(
         "/changepassword?service=tourtracker",
@@ -277,5 +292,11 @@ def test_password_reset_one_time_token(db, seed_db):
     token = password_reset_email.token_url.split("?token=")[1]
     payload = decode_jwt(token, secret_key=secret_key)
     assert payload['sub'] == user.username
+
+
+def test_generate_user_fingerprint():
+    user = BaseUser(email='test@test.com', username='test', password_hash='dummypasswordhash')
+    fingerprint, fingerprint_hash = user.generate_user_fingerprint()
+    assert user.pwd_hasher.verify(fingerprint_hash, fingerprint) is True
 
 

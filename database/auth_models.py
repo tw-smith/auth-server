@@ -2,6 +2,7 @@ from sqlalchemy import Boolean, Column, String, Integer
 from sqlalchemy.orm import DeclarativeBase
 from argon2 import PasswordHasher
 from argon2 import exceptions as argonexceptions
+import secrets
 
 
 class BaseUser(DeclarativeBase):
@@ -14,13 +15,17 @@ class BaseUser(DeclarativeBase):
     created_at = Column(Integer)
     pwd_hasher = PasswordHasher()
 
-
     def authenticate_user(self, password):
         try:
             self.pwd_hasher.verify(self.password_hash, password)
         except argonexceptions.VerifyMismatchError:
             return False
         return True
+
+    def generate_user_fingerprint(self):
+        fingerprint = secrets.token_urlsafe(32)
+        fingerprint_hash = self.pwd_hasher.hash(fingerprint)
+        return fingerprint, fingerprint_hash
 
 
 class TourTrackerUser(BaseUser):
