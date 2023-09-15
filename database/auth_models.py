@@ -9,6 +9,7 @@ class BaseUser(DeclarativeBase):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     username = Column(String, unique=True, index=True)
+    public_id = Column(String, unique=True, index=True)
     password_hash = Column(String)
     verified = Column(Boolean, default=False)
     password_locked = Column(Boolean, default=False)

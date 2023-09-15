@@ -3,7 +3,7 @@ from sendgrid.helpers.mail import Mail
 import os
 from config import settings
 from database.auth_models import TourTrackerUser, ArcadeUser, BaseUser
-from jwt_utilities import JWTUserAccessToken, encode_jwt
+from jwt_utilities import encode_jwt
 from datetime import timedelta
 
 
@@ -15,7 +15,7 @@ class AuthEmail:
         self.base_url = base_url
         self.url_path = ''
         self.payload = {
-            "sub": self.user.username
+            "sub": self.user.public_id
         }
         self.token_url = self.generate_token_url()
         self.email_subject = ''
@@ -76,11 +76,3 @@ class VerificationEmail(AuthEmail):
                 self.sendgrid_template_id = settings.tourtracker_verification_email_template_id
             case "arcade":
                 self.sendgrid_template_id = settings.arcade_verification_email_template_id
-
-
-def send_password_reset_email(user: TourTrackerUser | ArcadeUser, service: str, base_url: str):
-    payload = {
-        "sub": user.username,
-    }
-    token = encode_jwt(payload, service, expires_delta=timedelta(minutes=15))
-    verification_url = f"{base_url}?token={token}"

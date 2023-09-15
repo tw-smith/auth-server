@@ -12,6 +12,7 @@ class UserCreate(UserBase):
 
 class User(UserBase):
     id: int
+    public_id: str
     verified: bool
     password_locked: bool
     created_at: int

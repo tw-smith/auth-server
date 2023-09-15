@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from db_utils import get_db
 from database.auth_models import BaseUser, TourTrackerUser
-from database.crud import create_user, get_user_by_username, get_user_by_email
+from database.crud import create_user, get_user_by_username, get_user_by_email, get_user_by_public_id
 from database.auth_schemas import UserCreate
 from utils import pwd_hasher
 from jwt_utilities import decode_jwt
@@ -136,6 +136,14 @@ def test_get_user_by_email(db, seed_db):
     assert user.username == 'Mr Verified'
 
 
+def test_get_user_by_public_id(db, seed_db):
+    user = get_user_by_email(db, 'verified@test.com', 'tourtracker')
+    public_id = user.public_id
+    user_public_id = get_user_by_public_id(db, public_id, 'tourtracker')
+    assert user_public_id is not None
+    assert user_public_id.username == 'Mr Verified'
+
+
 def test_create_user(client, db):
     user = UserCreate(
         email='test@test.com',
@@ -240,8 +248,6 @@ def test_auth(client, seed_db):
         assert cookie.has_nonstandard_attr('HttpOnly') is True
 
 
-
-
 def test_change_password(client, db, seed_db):
     response = client.post(
         "/changepassword?service=tourtracker",
@@ -291,7 +297,7 @@ def test_password_reset_one_time_token(db, seed_db):
     secret_key = f"{user.password_hash}_{user.created_at}"
     token = password_reset_email.token_url.split("?token=")[1]
     payload = decode_jwt(token, secret_key=secret_key)
-    assert payload['sub'] == user.username
+    assert payload['sub'] == user.public_id
 
 
 def test_generate_user_fingerprint():
