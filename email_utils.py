@@ -9,7 +9,7 @@ from datetime import timedelta
 
 
 class AuthEmail:
-    def __init__(self, user: BaseUser, service: str, base_url: str):
+    def __init__(self, user: BaseUser, service: str, base_url: str = ''):
         self.user = user
         self.service = service
         self.base_url = base_url
@@ -49,10 +49,11 @@ class AuthEmail:
 
 
 class PasswordResetEmail(AuthEmail):
-    def __init__(self, user: BaseUser, service: str, base_url: str):
+    def __init__(self, user: BaseUser, service: str, base_url: str = ''):
         super().__init__(user, service, base_url)
         self.email_subject = "Password Reset Email"
         self.url_path = '/resetpassword'
+        self.token_url = self.generate_token_url()
         match self.service:
             case "tourtracker":
                 self.sendgrid_template_id = settings.tourtracker_password_reset_email_template_id
@@ -63,11 +64,23 @@ class PasswordResetEmail(AuthEmail):
     def generate_token_url(self):
         secret_key = f"{self.user.password_hash}_{self.user.created_at}"
         token = encode_jwt(self.payload, self.service, expires_delta=timedelta(minutes=15), secret_key=secret_key)
-        return f"{self.base_url}{self.url_path}?token={token}"
+        return f"{self.base_url}{self.url_path}?username={self.user.username}&service={self.service}&token={token}"
+
+
+class PasswordResetConfirmationEmail(AuthEmail):
+    def __init__(self, user: BaseUser, service: str, base_url: str = ''):
+        super().__init__(user, service, base_url)
+        self.email_subject = 'Successful Password Reset'
+        match self.service:
+            case "tourtracker":
+                self.sendgrid_template_id = settings.tourtracker_password_reset_confirmation_email_template_id
+            case "arcade":
+                self.sendgrid_template_id = settings.arcade_password_reset_confirmation_email_template_id
+
 
 
 class VerificationEmail(AuthEmail):
-    def __init__(self, user: BaseUser, service: str, base_url: str):
+    def __init__(self, user: BaseUser, service: str, base_url: str = ''):
         super().__init__(user, service, base_url)
         self.email_subject = "Please verify your email address"
         self.url_path = '/verify'

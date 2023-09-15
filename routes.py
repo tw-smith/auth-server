@@ -7,7 +7,7 @@ from database.crud import get_user_by_email, get_user_by_username, create_user, 
 from db_utils import get_db
 from sqlalchemy.orm import Session
 from utils import pwd_hasher
-from email_utils import VerificationEmail, PasswordResetEmail
+from email_utils import VerificationEmail, PasswordResetEmail, PasswordResetConfirmationEmail
 from jwt_utilities import encode_jwt, decode_jwt
 from config import settings
 
@@ -30,11 +30,15 @@ class SignupForm:
 
 class PasswordChangeForm:
     def __init__(self,
-                 username: str = Form(),
                  old_password: str = Form(),
                  new_password: str = Form()):
-        self.username = username
         self.old_password = old_password
+        self.new_password = new_password
+
+
+class PasswordResetForm:
+    def __init__(self,
+                 new_password: str = Form()):
         self.new_password = new_password
 
 
@@ -117,9 +121,10 @@ async def login_user(service: str,
 
 @router.post("/changepassword")
 async def change_password(service: str,
+                          username: str,
                           form_data: Annotated[PasswordChangeForm, Depends()],
                           db: Session = Depends(get_db)):
-    user = get_user_by_username(db, form_data.username, service)
+    user = get_user_by_username(db, username, service)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Authorisation Error",
@@ -135,21 +140,45 @@ async def change_password(service: str,
                             headers={"WWW-Authenticate": "Bearer"})
 
 
-@router.post("/resetpassword")
+@router.post("/resetpasswordrequest")
 async def request_password_reset(service: str,
                                  form_data: Annotated[PasswordResetRequestForm, Depends()],
                                  request: Request,
                                  background_tasks: BackgroundTasks,
                                  db: Session = Depends(get_db)):
     user = get_user_by_email(db, form_data.email, service)
+    if user is not None:
+        password_reset_email = PasswordResetEmail(user, service, str(request.url_for('verify_user')))
+        background_tasks.add_task(password_reset_email.send_email)
+        user.password_locked = True
+        db.commit()
+        db.refresh(user)
+    return {"msg": "Password reset requested if user exists"}
+
+
+@router.post("/resetpassword")
+async def password_reset(token,
+                         username,
+                         service,
+                         form_data: Annotated[PasswordResetForm, Depends()],
+                         background_tasks: BackgroundTasks,
+                         db: Session = Depends(get_db)):
+    user = get_user_by_username(db, username, service)
+    print(token)
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED) #TODO do we want to do this as it alerts user that account doesn't exist?
-    password_reset_email = PasswordResetEmail(user, service, str(request.url_for('verify_user')))
-    background_tasks.add_task(password_reset_email.send_email)
-    user.password_locked = True
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    secret_key = f"{user.password_hash}_{user.created_at}"
+    token_payload = decode_jwt(token, secret_key)
+    token_public_id = token_payload['sub']
+    if token_public_id != user.public_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    user.password_hash = pwd_hasher.hash(form_data.new_password)
     db.commit()
     db.refresh(user)
-    return {"msg": "Password reset requested"} # TODO as for above todo
+    password_reset_conformation_email = PasswordResetConfirmationEmail(user, token_payload['service'])
+    background_tasks.add_task(password_reset_conformation_email.send_email)
+    return {"msg": "Password reset"}
+
 
 
 

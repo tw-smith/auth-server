@@ -12,8 +12,10 @@ class Settings(BaseSettings):
     production: bool
     tourtracker_verification_email_template_id: str
     tourtracker_password_reset_email_template_id: str
+    tourtracker_password_reset_confirmation_email_template_id: str
     arcade_verification_email_template_id: str
     arcade_password_reset_email_template_id: str
+    arcade_password_reset_confirmation_email_template_id: str
 
     class Config:
         env_file = ".env"

@@ -250,8 +250,8 @@ def test_auth(client, seed_db):
 
 def test_change_password(client, db, seed_db):
     response = client.post(
-        "/changepassword?service=tourtracker",
-        data={"username": "Mr Verified", "old_password": "testpassword", "new_password": "newpassword"}
+        "/changepassword?service=tourtracker&username=Mr%20Verified",
+        data={"old_password": "testpassword", "new_password": "newpassword"}
     )
     assert response.status_code == 200
     assert response.json() == {"msg": "Password changed"}
@@ -261,8 +261,8 @@ def test_change_password(client, db, seed_db):
 
 def test_change_password_incorrect_old_password(client, db, seed_db):
     response = client.post(
-        "/changepassword?service=tourtracker",
-        data={"username": "Mr Verified", "old_password": "wrongpassword", "new_password": "newpassword"}
+        "/changepassword?service=tourtracker&username=Mr%20Verified",
+        data={"old_password": "wrongpassword", "new_password": "newpassword"}
     )
     assert response.status_code == 401
     assert response.json() == {"detail": "Authorisation Error"}
@@ -285,19 +285,30 @@ def test_verify_user(client, db, seed_db):
 
 
 def test_password_reset_request(client, db, seed_db):
-    response = client.post('/resetpassword?service=tourtracker',
+    response = client.post('/resetpasswordrequest?service=tourtracker',
                           data={'email': 'verified@test.com'})
     assert response.status_code == 200
-    assert response.json() == {"msg": "Password reset requested"}
+    assert response.json() == {"msg": "Password reset requested if user exists"}
 
 
 def test_password_reset_one_time_token(db, seed_db):
     user = get_user_by_email(db, "verified@test.com", "tourtracker")
     password_reset_email = PasswordResetEmail(user, 'tourtracker', 'http://127.0.0.1')
     secret_key = f"{user.password_hash}_{user.created_at}"
-    token = password_reset_email.token_url.split("?token=")[1]
+    token = password_reset_email.token_url.split("&token=")[1]
     payload = decode_jwt(token, secret_key=secret_key)
     assert payload['sub'] == user.public_id
+
+
+def test_password_reset(client, db, seed_db):
+    user = get_user_by_email(db, "verified@test.com", "tourtracker")
+    password_reset_email = PasswordResetEmail(user, 'tourtracker')
+    password_reset_url = password_reset_email.token_url
+    response = client.post(password_reset_url,
+                           data={'new_password': 'newpassword'})
+    print(password_reset_url)
+    assert response.status_code == 200
+    assert user.authenticate_user("newpassword") is True
 
 
 def test_generate_user_fingerprint():
