@@ -62,7 +62,7 @@ async def signup_user(service: str,
     db_user_email = get_user_by_email(db, form_data.email, service)
     db_user_username = get_user_by_username(db, form_data.username, service)
     if db_user_email or db_user_username:
-        raise HTTPException(status_code=400, detail="Email or username already registered")
+        raise HTTPException(status_code=409, detail="Email or username already registered.")
     user = auth_schemas.UserCreate(
         email=form_data.email,
         username=form_data.username,
@@ -71,7 +71,8 @@ async def signup_user(service: str,
     user_object = create_user(db=db, user=user, service=service)
     verification_email = VerificationEmail(user_object, service, str(request.url_for('verify_user')))
     background_tasks.add_task(verification_email.send_email)
-    return {"msg": "user created"}
+    return {"msg": "user created",
+            "public_id": user_object.public_id}
 
 
 @router.get("/verify")
