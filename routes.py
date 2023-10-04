@@ -1,5 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, HTTPException, Depends, status, Form, BackgroundTasks, Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from database import auth_schemas
@@ -58,6 +59,7 @@ async def signup_user(service: str,
                       background_tasks: BackgroundTasks,
                       form_data: Annotated[SignupForm, Depends()],
                       request: Request,
+                      redirect_url: str = None,
                       db: Session = Depends(get_db)):
     db_user_email = get_user_by_email(db, form_data.email, service)
     db_user_username = get_user_by_username(db, form_data.username, service)
@@ -69,7 +71,7 @@ async def signup_user(service: str,
         password_hash=pwd_hasher.hash(form_data.password)
     )
     user_object = create_user(db=db, user=user, service=service)
-    verification_email = VerificationEmail(user_object, service, str(request.url_for('verify_user')))
+    verification_email = VerificationEmail(user_object, service, str(request.url_for('verify_user')), redirect_url)
     background_tasks.add_task(verification_email.send_email)
     return {"msg": "user created",
             "public_id": user_object.public_id}
@@ -77,7 +79,9 @@ async def signup_user(service: str,
 
 @router.get("/verify")
 async def verify_user(token: str,
+                      redirect_url: str = None,
                       db: Session = Depends(get_db)):
+    print(token)
     token_payload = decode_jwt(token)
     user = get_user_by_public_id(db, token_payload['sub'], token_payload['service'])
     if not user:
@@ -86,7 +90,7 @@ async def verify_user(token: str,
     else:
         user.verified = True
         db.commit() #TODO move this to db crud utils?
-        return {"msg": "user verified"}
+        return RedirectResponse(redirect_url)
 
 
 @router.post("/auth", response_model=Token)

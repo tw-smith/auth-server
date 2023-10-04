@@ -12,6 +12,7 @@ from utils import pwd_hasher
 from jwt_utilities import decode_jwt
 from email_utils import VerificationEmail, PasswordResetEmail
 from config import settings
+from urllib.parse import urlparse, parse_qs
 
 # Test database setup reference: https://dev.to/jbrocher/fastapi-testing-a-database-5ao5
 
@@ -180,8 +181,8 @@ def test_signup_email_already_exists(client, seed_db):
               "username": "Joe Bloggs",
               "password": "testpassword123"}
     )
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Email or username already registered"}
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Email or username already registered."}
 
 
 def test_signup_username_already_exists(client, seed_db):
@@ -191,8 +192,8 @@ def test_signup_username_already_exists(client, seed_db):
               "username": "Mr Verified",
               "password": "testpassword123"}
     )
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Email or username already registered"}
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Email or username already registered."}
 
 
 def test_auth_invalid_username(client, seed_db):
@@ -274,14 +275,19 @@ def test_change_password_incorrect_old_password(client, db, seed_db):
 
 def test_verify_user(client, db, seed_db):
     user = get_user_by_email(db, 'nonverified@test.com', 'tourtracker')
-    verification_email = VerificationEmail(user, 'tourtracker', 'http://127.0.0.1:8000')
+    verification_email = VerificationEmail(user, 'tourtracker', 'http://127.0.0.1:8000', 'http://testserver')
     email_subject, token_url = verification_email.send_email()
     assert email_subject == "Please verify your email address"
-    token = token_url.split("?token=")[1]
-    response = client.get(f"/verify?token={token}")
-    assert response.status_code == 200
-    assert response.json() == {"msg": "user verified"}
+    parsed_url = urlparse(token_url)
+    query_strings = parse_qs(parsed_url[4])
+    token = query_strings['token'][0]
+    redirect_url = query_strings['redirect_url'][0]
+    response = client.get(f"/verify?token={token}&redirect_url={redirect_url}", follow_redirects=False)
     assert user.verified is True
+    assert response.is_redirect is True
+    assert response.status_code == 307
+
+
 
 
 def test_password_reset_request(client, db, seed_db):
@@ -293,9 +299,11 @@ def test_password_reset_request(client, db, seed_db):
 
 def test_password_reset_one_time_token(db, seed_db):
     user = get_user_by_email(db, "verified@test.com", "tourtracker")
-    password_reset_email = PasswordResetEmail(user, 'tourtracker', 'http://127.0.0.1')
+    password_reset_email = PasswordResetEmail(user, 'tourtracker', 'http://127.0.0.1', 'https://redirect.to')
     secret_key = f"{user.password_hash}_{user.created_at}"
-    token = password_reset_email.token_url.split("&token=")[1]
+    parsed_url = urlparse(password_reset_email.token_url)
+    query_strings = parse_qs(parsed_url[4])
+    token = query_strings['token'][0]
     payload = decode_jwt(token, secret_key=secret_key)
     assert payload['sub'] == user.public_id
 

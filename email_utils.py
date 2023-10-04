@@ -9,10 +9,11 @@ from datetime import timedelta
 
 
 class AuthEmail:
-    def __init__(self, user: BaseUser, service: str, base_url: str = ''):
+    def __init__(self, user: BaseUser, service: str, base_url: str = '', redirect_url: str = ''):
         self.user = user
         self.service = service
         self.base_url = base_url
+        self.redirect_url = redirect_url
         self.url_path = ''
         self.payload = {
             "sub": self.user.public_id
@@ -23,7 +24,7 @@ class AuthEmail:
 
     def generate_token_url(self):
         token = encode_jwt(self.payload, self.service, expires_delta=timedelta(minutes=15))
-        return f"{self.base_url}{self.url_path}?token={token}"
+        return f"{self.base_url}{self.url_path}?token={token}&redirect_url={self.redirect_url}"
 
     def send_email(self):
         if settings.production:
@@ -49,8 +50,8 @@ class AuthEmail:
 
 
 class PasswordResetEmail(AuthEmail):
-    def __init__(self, user: BaseUser, service: str, base_url: str = ''):
-        super().__init__(user, service, base_url)
+    def __init__(self, user: BaseUser, service: str, base_url: str = '', redirect_url=''):
+        super().__init__(user, service, base_url, redirect_url)
         self.email_subject = "Password Reset Email"
         self.url_path = '/resetpassword'
         self.token_url = self.generate_token_url()
@@ -64,12 +65,12 @@ class PasswordResetEmail(AuthEmail):
     def generate_token_url(self):
         secret_key = f"{self.user.password_hash}_{self.user.created_at}"
         token = encode_jwt(self.payload, self.service, expires_delta=timedelta(minutes=15), secret_key=secret_key)
-        return f"{self.base_url}{self.url_path}?username={self.user.username}&service={self.service}&token={token}"
+        return f"{self.base_url}{self.url_path}?username={self.user.username}&service={self.service}&token={token}&redirect_url{self.redirect_url}"
 
 
 class PasswordResetConfirmationEmail(AuthEmail):
-    def __init__(self, user: BaseUser, service: str, base_url: str = ''):
-        super().__init__(user, service, base_url)
+    def __init__(self, user: BaseUser, service: str, base_url: str = '', redirect_url=''):
+        super().__init__(user, service, base_url, redirect_url)
         self.email_subject = 'Successful Password Reset'
         match self.service:
             case "tourtracker":
@@ -80,8 +81,8 @@ class PasswordResetConfirmationEmail(AuthEmail):
 
 
 class VerificationEmail(AuthEmail):
-    def __init__(self, user: BaseUser, service: str, base_url: str = ''):
-        super().__init__(user, service, base_url)
+    def __init__(self, user: BaseUser, service: str, base_url: str = '', redirect_url=''):
+        super().__init__(user, service, base_url, redirect_url)
         self.email_subject = "Please verify your email address"
         self.url_path = '/verify'
         match self.service:
