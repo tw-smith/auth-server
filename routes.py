@@ -113,7 +113,7 @@ async def login_user(service: str,
                                 httponly=True,
                                 secure=True,
                                 samesite='strict',
-                                max_age=settings.access_token_expire_minutes*60)
+                                max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES*60)
             return {"access_token": access_token}
         else:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
@@ -153,12 +153,13 @@ async def request_password_reset(service: str,
                                  db: Session = Depends(get_db)):
     user = get_user_by_email(db, form_data.email, service)
     if user is not None:
-        password_reset_email = PasswordResetEmail(user, service, str(request.url_for('verify_user')))
+        password_reset_email = PasswordResetEmail(user, service)
+        print(password_reset_email.token_url)
         background_tasks.add_task(password_reset_email.send_email)
         user.password_locked = True
         db.commit()
         db.refresh(user)
-    return {"detail": "Password reset link sent if user exists"}
+    return {"detail": "Password reset link sent if user exists."}
 
 
 @router.post("/resetpassword")

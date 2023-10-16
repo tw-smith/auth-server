@@ -19,7 +19,7 @@ from urllib.parse import urlparse, parse_qs
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 
-settings.secret_key = 'test-jwt-secret'
+# settings.secret_key = 'test-jwt-secret'
 
 
 @pytest.fixture(scope="function")
@@ -97,7 +97,7 @@ def seed_db(db):
 def test_decode_jwt_expired(test_jwts):
     token = test_jwts['expired_jwt']
     with pytest.raises(HTTPException) as e:
-        token = decode_jwt(token, settings.secret_key)
+        token = decode_jwt(token)
     assert e.value.status_code == 401
     assert e.value.detail == "Expired JWT Token"
 
@@ -120,7 +120,7 @@ def test_decode_jwt_bad_algo(test_jwts):
 
 def test_decode_jwt(test_jwts):
     token = test_jwts['valid_jwt']
-    payload = decode_jwt(token, settings.secret_key)
+    payload = decode_jwt(token)
     assert payload['sub'] == 'Mr Verified'
     assert payload['service'] == 'tourtracker'
 
@@ -223,8 +223,8 @@ def test_auth_non_verified_user(client, seed_db):
         "/auth?service=tourtracker",
         data={"username": "Mrs NonVerified", "password": "testpassword"}
     )
-    assert response.status_code == 401
-    assert response.json() == {"detail": "Account not verified"}
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Account not verified."}
 
 
 def test_auth_password_locked(client, seed_db):
@@ -232,8 +232,8 @@ def test_auth_password_locked(client, seed_db):
         "/auth?service=tourtracker",
         data={"username": "Lady Locked", "password": "testpassword"}
     )
-    assert response.status_code == 401
-    assert response.json() == {"detail": "Account not verified"}
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Account not verified."}
 
 
 def test_auth(client, seed_db):
@@ -255,7 +255,7 @@ def test_change_password(client, db, seed_db):
         data={"old_password": "testpassword", "new_password": "newpassword"}
     )
     assert response.status_code == 200
-    assert response.json() == {"msg": "Password changed"}
+    assert response.json() == {"detail": "Password changed"}
     user = get_user_by_email(db,"verified@test.com", "tourtracker")
     assert user.authenticate_user("newpassword") is True
 
@@ -294,7 +294,7 @@ def test_password_reset_request(client, db, seed_db):
     response = client.post('/resetpasswordrequest?service=tourtracker',
                           data={'email': 'verified@test.com'})
     assert response.status_code == 200
-    assert response.json() == {"msg": "Password reset requested if user exists"}
+    assert response.json() == {"detail": "Password reset link sent if user exists."}
 
 
 def test_password_reset_one_time_token(db, seed_db):
@@ -312,6 +312,7 @@ def test_password_reset(client, db, seed_db):
     user = get_user_by_email(db, "verified@test.com", "tourtracker")
     password_reset_email = PasswordResetEmail(user, 'tourtracker')
     password_reset_url = password_reset_email.token_url
+    print(password_reset_url)
     response = client.post(password_reset_url,
                            data={'new_password': 'newpassword'})
     print(password_reset_url)

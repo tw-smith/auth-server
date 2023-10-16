@@ -6,9 +6,6 @@ from argon2 import PasswordHasher
 from config import settings
 from database.crud import get_user_by_username
 
-SECRET_KEY = settings.secret_key
-ALGORITHM = settings.jwt_algorithm
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
 
 pwd_hasher = PasswordHasher()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -21,7 +18,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db, se
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        token_payload = jwt.decode(token, SECRET_KEY, algorithms=ALGORITHM)
+        token_payload = jwt.decode(token, str(settings.SECRET_KEY), algorithms=settings.JWT_ALGORITHM)
         username: str = token_payload.get("sub")
         if username is None:
             raise auth_exception
