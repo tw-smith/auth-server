@@ -107,7 +107,11 @@ async def login_user(service: str,
         if user.verified and not user.password_locked:
             # https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html
             fingerprint, fingerprint_hash = user.generate_user_fingerprint()
-            access_token = encode_jwt({"fgp_hash": fingerprint_hash}, service)
+            access_token_payload = {
+                'fgp_hash': fingerprint_hash,
+                'sub': user.public_id
+            }
+            access_token = encode_jwt(access_token_payload, service)
             response.set_cookie(key="__Secure-fgp",
                                 value=fingerprint,
                                 httponly=True,

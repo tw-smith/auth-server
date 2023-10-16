@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from config import settings
 
-allowed_origins = settings.ALLOWED_ORIGINS
+allowed_origins = list(settings.ALLOWED_ORIGINS)
 
 # Database setup
 app = FastAPI(debug=settings.DEBUG)
