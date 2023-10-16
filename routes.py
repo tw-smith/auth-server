@@ -73,7 +73,7 @@ async def signup_user(service: str,
     user_object = create_user(db=db, user=user, service=service)
     verification_email = VerificationEmail(user_object, service, str(request.url_for('verify_user')), redirect_url)
     background_tasks.add_task(verification_email.send_email)
-    return {"msg": "user created",
+    return {"detail": "user created",
             "public_id": user_object.public_id}
 
 
@@ -138,7 +138,7 @@ async def change_password(service: str,
         user.password_hash = pwd_hasher.hash(form_data.new_password)
         db.commit()
         db.refresh(user)
-        return {"msg": "Password changed"}
+        return {"detail": "Password changed"}
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Authorisation Error",
@@ -158,7 +158,7 @@ async def request_password_reset(service: str,
         user.password_locked = True
         db.commit()
         db.refresh(user)
-    return {"msg": "Password reset requested if user exists"}
+    return {"detail": "Password reset link sent if user exists"}
 
 
 @router.post("/resetpassword")
@@ -182,7 +182,7 @@ async def password_reset(token,
     db.refresh(user)
     password_reset_conformation_email = PasswordResetConfirmationEmail(user, token_payload['service'])
     background_tasks.add_task(password_reset_conformation_email.send_email)
-    return {"msg": "Password reset"}
+    return {"detail": "Password reset!"}
 
 
 
