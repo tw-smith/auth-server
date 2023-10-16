@@ -116,8 +116,8 @@ async def login_user(service: str,
                                 max_age=settings.access_token_expire_minutes*60)
             return {"access_token": access_token}
         else:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail="Account not verified")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Account not verified.")
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Authorisation Error",
