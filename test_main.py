@@ -5,18 +5,21 @@ from main import app
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from db_utils import get_db
-from database.auth_models import TourTrackerUser
-from database.crud import create_user, get_user_by_username, get_user_by_email
+from database.auth_models import BaseUser, TourTrackerUser
+from database.crud import create_user, get_user_by_username, get_user_by_email, get_user_by_public_id
 from database.auth_schemas import UserCreate
 from utils import pwd_hasher
 from jwt_utilities import decode_jwt
-from email_utils import send_verification_email
+from email_utils import VerificationEmail, PasswordResetEmail
 from config import settings
+from urllib.parse import urlparse, parse_qs
+
+# Test database setup reference: https://dev.to/jbrocher/fastapi-testing-a-database-5ao5
 
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
 
-settings.secret_key = 'test-jwt-secret'
+# settings.secret_key = 'test-jwt-secret'
 
 
 @pytest.fixture(scope="function")
@@ -71,11 +74,23 @@ def seed_db(db):
     db.refresh(verified_user_object)
 
     non_verified_user = UserCreate(
-        email = "nonverified@test.com",
-        username = "Mrs NonVerified",
+        email="nonverified@test.com",
+        username="Mrs NonVerified",
         password_hash=pwd_hasher.hash("testpassword")
     )
     non_verified_user_object = create_user(db, non_verified_user, 'tourtracker')
+
+    password_locked_user = UserCreate(
+        email="passwordlocked@test.com",
+        username="Lady Locked",
+        password_hash=pwd_hasher.hash("testpassword")
+    )
+    password_locked_user_object = create_user(db, password_locked_user, 'tourtracker')
+    password_locked_user_object.verified = True
+    password_locked_user_object.password_locked = True
+    db.commit()
+    db.refresh(password_locked_user_object)
+
     yield non_verified_user_object
 
 
@@ -122,6 +137,14 @@ def test_get_user_by_email(db, seed_db):
     assert user.username == 'Mr Verified'
 
 
+def test_get_user_by_public_id(db, seed_db):
+    user = get_user_by_email(db, 'verified@test.com', 'tourtracker')
+    public_id = user.public_id
+    user_public_id = get_user_by_public_id(db, public_id, 'tourtracker')
+    assert user_public_id is not None
+    assert user_public_id.username == 'Mr Verified'
+
+
 def test_create_user(client, db):
     user = UserCreate(
         email='test@test.com',
@@ -158,8 +181,8 @@ def test_signup_email_already_exists(client, seed_db):
               "username": "Joe Bloggs",
               "password": "testpassword123"}
     )
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Email or username already registered"}
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Email or username already registered."}
 
 
 def test_signup_username_already_exists(client, seed_db):
@@ -169,8 +192,8 @@ def test_signup_username_already_exists(client, seed_db):
               "username": "Mr Verified",
               "password": "testpassword123"}
     )
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Email or username already registered"}
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Email or username already registered."}
 
 
 def test_auth_invalid_username(client, seed_db):
@@ -200,25 +223,47 @@ def test_auth_non_verified_user(client, seed_db):
         "/auth?service=tourtracker",
         data={"username": "Mrs NonVerified", "password": "testpassword"}
     )
-    assert response.status_code == 401
-    assert response.json() == {"detail": "Account not verified"}
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Account not verified."}
+
+
+def test_auth_password_locked(client, seed_db):
+    response = client.post(
+        "/auth?service=tourtracker",
+        data={"username": "Lady Locked", "password": "testpassword"}
+    )
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Account not verified."}
+
+
+def test_auth(client, seed_db):
+    response = client.post(
+        "/auth?service=tourtracker",
+        data={"username": "Mr Verified", "password": "testpassword"}
+    )
+    assert response.status_code == 200
+    assert response.cookies.get('__Secure-fgp') is not None
+    for cookie in response.cookies.jar:
+        assert cookie.secure is True
+        assert cookie.get_nonstandard_attr('SameSite') == 'strict'
+        assert cookie.has_nonstandard_attr('HttpOnly') is True
 
 
 def test_change_password(client, db, seed_db):
     response = client.post(
-        "/changepassword?service=tourtracker",
-        data={"username": "Mr Verified", "old_password": "testpassword", "new_password": "newpassword"}
+        "/changepassword?service=tourtracker&username=Mr%20Verified",
+        data={"old_password": "testpassword", "new_password": "newpassword"}
     )
     assert response.status_code == 200
-    assert response.json() == {"msg": "Password changed"}
+    assert response.json() == {"detail": "Password changed"}
     user = get_user_by_email(db,"verified@test.com", "tourtracker")
     assert user.authenticate_user("newpassword") is True
 
 
 def test_change_password_incorrect_old_password(client, db, seed_db):
     response = client.post(
-        "/changepassword?service=tourtracker",
-        data={"username": "Mr Verified", "old_password": "wrongpassword", "new_password": "newpassword"}
+        "/changepassword?service=tourtracker&username=Mr%20Verified",
+        data={"old_password": "wrongpassword", "new_password": "newpassword"}
     )
     assert response.status_code == 401
     assert response.json() == {"detail": "Authorisation Error"}
@@ -230,9 +275,54 @@ def test_change_password_incorrect_old_password(client, db, seed_db):
 
 def test_verify_user(client, db, seed_db):
     user = get_user_by_email(db, 'nonverified@test.com', 'tourtracker')
-    token = send_verification_email(user, 'tourtracker', 'http://127.0.0.1:8000')
-    response = client.get(f"/verifyuser?token={token}")
-    assert response.status_code == 200
-    assert response.json() == {"msg": "user verified"}
+    verification_email = VerificationEmail(user, 'tourtracker', 'http://127.0.0.1:8000', 'http://testserver')
+    email_subject, token_url = verification_email.send_email()
+    assert email_subject == "Please verify your email address"
+    parsed_url = urlparse(token_url)
+    query_strings = parse_qs(parsed_url[4])
+    token = query_strings['token'][0]
+    redirect_url = query_strings['redirect_url'][0]
+    response = client.get(f"/verify?token={token}&redirect_url={redirect_url}", follow_redirects=False)
     assert user.verified is True
+    assert response.is_redirect is True
+    assert response.status_code == 307
+
+
+
+
+def test_password_reset_request(client, db, seed_db):
+    response = client.post('/resetpasswordrequest?service=tourtracker',
+                          data={'email': 'verified@test.com'})
+    assert response.status_code == 200
+    assert response.json() == {"detail": "Password reset link sent if user exists."}
+
+
+def test_password_reset_one_time_token(db, seed_db):
+    user = get_user_by_email(db, "verified@test.com", "tourtracker")
+    password_reset_email = PasswordResetEmail(user, 'tourtracker', 'http://127.0.0.1', 'https://redirect.to')
+    secret_key = f"{user.password_hash}_{user.created_at}"
+    parsed_url = urlparse(password_reset_email.token_url)
+    query_strings = parse_qs(parsed_url[4])
+    token = query_strings['token'][0]
+    payload = decode_jwt(token, secret_key=secret_key)
+    assert payload['sub'] == user.public_id
+
+
+def test_password_reset(client, db, seed_db):
+    user = get_user_by_email(db, "verified@test.com", "tourtracker")
+    password_reset_email = PasswordResetEmail(user, 'tourtracker')
+    password_reset_url = password_reset_email.token_url
+    print(password_reset_url)
+    response = client.post(password_reset_url,
+                           data={'new_password': 'newpassword'})
+    print(password_reset_url)
+    assert response.status_code == 200
+    assert user.authenticate_user("newpassword") is True
+
+
+def test_generate_user_fingerprint():
+    user = BaseUser(email='test@test.com', username='test', password_hash='dummypasswordhash')
+    fingerprint, fingerprint_hash = user.generate_user_fingerprint()
+    assert user.pwd_hasher.verify(fingerprint_hash, fingerprint) is True
+
 
